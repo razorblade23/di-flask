@@ -14,7 +14,7 @@ A minimal and clean FastAPI-style dependency injection system for Flask.
 ## Installation
 
 ```bash
-pip install flask-di
+pip install di-flask
 ```
 
 ## Usage

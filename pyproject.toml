@@ -1,6 +1,6 @@
 [project]
 name = "flask-di"
-version = "0.1.2"
+version = "0.1.3"
 description = "FastAPI-style dependency injection for Flask using Annotated and Python 3.12 features."
 authors = [{ name = "razorblade23", email = "contact@razorblade23.dev" }]
 readme = "README.md"

@@ -42,26 +42,30 @@ jobs:
     name: Publish to PyPI
     needs: build
     runs-on: ubuntu-latest
+    environment:
+      name: pypi
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-
-      - name: Flatten dist directory
-        run: |
-          mkdir final-dist
-          find dist -type f -name "*.whl" -exec cp {} final-dist/ \;
-          find dist -type f -name "*.tar.gz" -exec cp {} final-dist/ \;
+      - name: Checkout
+        uses: actions/checkout@v5
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v2
+        uses: astral-sh/setup-uv@v7
 
-      - name: Publish to PyPI
-        env:
-          name: pypi
-          url: https://pypi.org/p/flask-di/
-          UV_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-        run: |
-          uv publish final-dist
+      - name: Install Python 3.13
+        run: uv python install 3.13
+
+      - name: Build
+        run: uv build
+      
+      - name: Smoke test (wheel)
+        run: uv run --isolated --no-project --with dist/*.whl tests/test_basic.py
+
+      - name: Smoke test (source distribution)
+        run: uv run --isolated --no-project --with dist/*.tar.gz tests/test_basic.py
+        
+      - name: Publish
+        run: uv publish

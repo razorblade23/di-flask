@@ -1,5 +1,5 @@
 [project]
-name = "flask-di"
+name = "di-flask"
 version = "0.1.3"
 description = "FastAPI-style dependency injection for Flask using Annotated and Python 3.12 features."
 authors = [{ name = "razorblade23", email = "contact@razorblade23.dev" }]
@@ -13,8 +13,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/razorblade23/flask-di"
-Issues = "https://github.com/razorblade23/flask-di/issues"
+Homepage = "https://github.com/razorblade23/di-flask"
+Issues = "https://github.com/razorblade23/di-flask/issues"
 
 [build-system]
 requires = ["hatchling"]

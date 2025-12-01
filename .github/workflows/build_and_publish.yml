@@ -1,0 +1,67 @@
+name: Build and Publish
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: Build wheels (Linux, macOS, Windows)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: uv sync
+
+      - name: Build wheel and sdist
+        run: uv build
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.os }}
+          path: dist/*
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Flatten dist directory
+        run: |
+          mkdir final-dist
+          find dist -type f -name "*.whl" -exec cp {} final-dist/ \;
+          find dist -type f -name "*.tar.gz" -exec cp {} final-dist/ \;
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v2
+
+      - name: Publish to PyPI
+        env:
+          name: pypi
+          url: https://pypi.org/p/flask-di/
+          UV_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          uv publish final-dist

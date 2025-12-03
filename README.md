@@ -1,5 +1,7 @@
 # Flask-DI
 
+![PyPI - Downloads](https://img.shields.io/pypi/dm/di-flask?style=for-the-badge&label=PyPi%20downloads&cacheSeconds=86400)
+
 A minimal and clean FastAPI-style dependency injection system for Flask.
 
 ## Features

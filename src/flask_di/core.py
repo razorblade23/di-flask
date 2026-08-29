@@ -1,5 +1,5 @@
 import inspect
-from typing import Annotated, get_args, get_origin, get_type_hints
+from typing import Annotated, Callable, get_args, get_origin, get_type_hints
 
 from flask import Flask, g
 
@@ -22,6 +22,10 @@ class DIFlask(Flask):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.dependency_overrides = {}
+
+    def resolve[T](self, dependency: Callable[..., T]) -> T:
+        """Public entrypoint for resolving a dependency outside a wrapped view."""
+        return self._resolve_dependency(Depends(dependency))
 
     # -------------------------------------------------------------------------
     # Wrap view functions so DI happens automatically

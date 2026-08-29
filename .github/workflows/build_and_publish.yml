@@ -3,8 +3,10 @@ name: Build and Publish
 on:
   push:
     tags:
-      - "v*"
+      - "v*.*.*"
     branches: [main]
+  release:
+    types: [created]
 
 jobs:
   test:

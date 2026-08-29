@@ -11,7 +11,7 @@ on:
 
 jobs:
   test:
-    name: Run Tests
+    name: Run Tests and Type Checks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -30,6 +30,9 @@ jobs:
       
       - name: Run Tests
         run: uv run pytest
+      
+      - name: Run Type Checks (mypy)
+        run: uv run mypy src/flask_di
 
   build:
     name: Build wheels (Linux, macOS, Windows)

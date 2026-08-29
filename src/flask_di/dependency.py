@@ -4,7 +4,7 @@ from typing import Callable, Optional
 class Depends[T]:
     def __init__(
         self,
-        dependency: Optional[Callable] = None,
+        dependency: Optional[Callable[..., T]] = None,
         return_type: Optional[type] = None,
     ):
         self.dependency = dependency

@@ -74,7 +74,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/flask-di/
+      url: https://pypi.org/p/di-flask/
     permissions:
       id-token: write
       contents: read

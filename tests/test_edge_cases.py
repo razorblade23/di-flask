@@ -1,6 +1,8 @@
+from typing import Annotated
+
 import pytest
 
-from flask_di import current_app
+from flask_di import Depends, current_app
 
 
 def test_resolve_returns_dependency_value(app):
@@ -68,3 +70,22 @@ def test_current_app_is_a_diflask_instance(app):
         # current_app is DIFlask's own re-export, statically typed as
         # DIFlask rather than plain Flask.
         assert isinstance(current_app._get_current_object(), type(app))
+
+
+def test_bare_depends_subscript_gives_clear_error(app, client):
+    """Depends[T] used as metadata without ever being called with a
+    factory function (i.e. Annotated[T, Depends[T]] instead of
+    Annotated[T, Depends[T](my_factory)] / Annotated[T, Depends(my_factory)])
+    raises a clear, actionable error instead of an opaque
+    'NoneType has no attribute __name__' AttributeError.
+    """
+    IntDep = Annotated[int, Depends[int]]
+
+    @app.route("/bare")
+    def view(v: IntDep):
+        return str(v)
+
+    resp = client.get("/bare")
+    assert resp.status_code == 500
+    assert b"NoneType" not in resp.data
+    assert b"Depends[T]" in resp.data

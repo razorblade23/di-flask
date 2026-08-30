@@ -1,10 +1,10 @@
 """
 Core injection behavior.
 
-Flask-DI only recognizes dependencies declared via
-`Annotated[T, Depends(fn)]` type hints — see test_known_limitations.py
-for the (currently unsupported) FastAPI-style `x=Depends(fn)` default
-value shown in the README's first example.
+Flask-DI recognizes dependencies declared either via
+`Annotated[T, Depends(fn)]` type hints, or via FastAPI's classic
+default-value style `x=Depends(fn)` (the form used in the README's
+first example).
 """
 
 from typing import Annotated
@@ -163,3 +163,62 @@ def test_add_url_rule_with_keyword_view_func_is_wrapped(app, client):
 
     resp = client.get("/keyword")
     assert resp.data == b"100"
+
+
+def test_default_value_style_depends_is_injected(app, client):
+    """FastAPI's classic default-value style also works:
+    `def view(user=Depends(get_db))`, as shown in the README's first
+    example.
+    """
+
+    def get_db():
+        return {"session": "db-session"}
+
+    @app.route("/legacy-style")
+    def view(user=Depends(get_db)):
+        return type(user).__name__
+
+    resp = client.get("/legacy-style")
+    assert resp.data == b"dict"
+
+
+def test_default_value_style_supports_nested_dependencies(app, client):
+    """Mirrors the README's Usage example end-to-end: a default-value
+    style dependency (get_user) that itself depends on another
+    default-value style dependency (get_db)."""
+
+    def get_db():
+        return {"session": "db-session"}
+
+    def get_user(db=Depends(get_db)):
+        return {"username": "alice", "db": db}
+
+    @app.route("/info")
+    def info(user=Depends(get_user)):
+        return user
+
+    resp = client.get("/info")
+    assert resp.get_json() == {
+        "username": "alice",
+        "db": {"session": "db-session"},
+    }
+
+
+def test_default_value_style_can_mix_with_annotated_style(app, client):
+    """A view can use Annotated[...] for one param and the bare
+    default-value style for another in the same signature."""
+
+    def get_db():
+        return "db"
+
+    def get_config():
+        return "cfg"
+
+    DbDep = Annotated[str, Depends(get_db)]
+
+    @app.route("/mixed")
+    def view(db: DbDep, config=Depends(get_config)):
+        return f"{db}-{config}"
+
+    resp = client.get("/mixed")
+    assert resp.data == b"db-cfg"

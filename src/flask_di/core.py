@@ -1,7 +1,9 @@
 import inspect
+from contextlib import ExitStack, contextmanager
 from typing import Annotated, Callable, get_args, get_origin, get_type_hints
 
 from flask import Flask, g
+from werkzeug.exceptions import InternalServerError
 
 from flask_di.dependency import Depends
 
@@ -12,9 +14,15 @@ class DIFlask(Flask):
 
     Supports:
         - Annotated[T, Depends(...)]
+        - FastAPI's classic default-value style: def view(x=Depends(fn))
         - Nested dependencies
         - Override system
-        - Per-request caching
+        - Per-request caching (keyed by dependency identity, not name)
+        - Generator dependencies (`yield`-based setup/teardown, e.g.
+              def get_session():
+                  with Session(engine) as session:
+                      yield session
+          )
         - Type-alias dependencies like:
               BackendAPIDep = Annotated[BackendAPI, Depends(get_backend_api)]
     """
@@ -22,6 +30,11 @@ class DIFlask(Flask):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.dependency_overrides = {}
+        # Run teardown for generator-based dependencies whenever the
+        # request (or, for resolve() used outside a view, the app
+        # context) that owns them ends.
+        self.teardown_request(self._close_dependency_exit_stack)
+        self.teardown_appcontext(self._close_dependency_exit_stack)
 
     def resolve[T](self, dependency: Callable[..., T]) -> T:
         """Public entrypoint for resolving a dependency outside a wrapped view."""
@@ -72,17 +85,49 @@ class DIFlask(Flask):
 
         for name, param in sig.parameters.items():
             annotation = type_hints.get(name)
+            depends_obj = None
 
-            # Must be Annotated[T, metadata...]
+            # Annotated[T, Depends(...)] style
             if get_origin(annotation) is Annotated:
                 ann_type, *metadata = get_args(annotation)
                 depends_obj = next(
                     (m for m in metadata if isinstance(m, Depends)), None
                 )
-                if depends_obj:
-                    dependency_map[name] = depends_obj
+
+            # FastAPI's classic default-value style:
+            #     def get_user(db=Depends(get_db)): ...
+            if depends_obj is None and isinstance(param.default, Depends):
+                depends_obj = param.default
+
+            if depends_obj:
+                dependency_map[name] = depends_obj
 
         return dependency_map
+
+    # -------------------------------------------------------------------------
+    # Per-request state: resolved-value cache and generator teardown stack
+    # -------------------------------------------------------------------------
+    def _dependency_cache(self) -> dict:
+        """Cache of already-resolved dependency values for the current
+        request/app context, keyed by the dependency callable itself
+        (identity), not by its __name__ — so two different callables
+        that happen to share a name never collide."""
+        if not hasattr(g, "_di_cache"):
+            g._di_cache = {}
+        return g._di_cache
+
+    def _dependency_exit_stack(self) -> ExitStack:
+        """ExitStack that owns the teardown half (the code after
+        `yield`) of any generator-based dependencies resolved during
+        the current request/app context."""
+        if not hasattr(g, "_di_exit_stack"):
+            g._di_exit_stack = ExitStack()
+        return g._di_exit_stack
+
+    def _close_dependency_exit_stack(self, exc=None):
+        stack = getattr(g, "_di_exit_stack", None)
+        if stack is not None:
+            stack.close()
 
     # -------------------------------------------------------------------------
     # Resolve a dependency function
@@ -90,14 +135,24 @@ class DIFlask(Flask):
     def _resolve_dependency(self, depends_obj: Depends):
         dep_func = depends_obj.dependency
 
+        if dep_func is None:
+            # Depends[T] was used as bare metadata (never called with a
+            # factory), e.g. Annotated[int, Depends[int]] instead of
+            # Annotated[int, Depends[int](my_factory)] / Depends(my_factory).
+            raise InternalServerError(
+                "Depends[T] has no factory function attached, so it can't "
+                "be resolved. Use Depends(my_factory) or Depends[T](my_factory) "
+                "instead of leaving Depends[T] bare inside Annotated[...]."
+            )
+
         # Apply override if present
         if dep_func in self.dependency_overrides:
             dep_func = self.dependency_overrides[dep_func]
 
-        # Request-scoped caching
-        cache_key = f"_dep_{dep_func.__name__}"  # type: ignore
-        if hasattr(g, cache_key):
-            return getattr(g, cache_key)
+        # Request-scoped caching, keyed by callable identity
+        cache = self._dependency_cache()
+        if dep_func in cache:
+            return cache[dep_func]
 
         # Collect nested dependencies
         sig = inspect.signature(dep_func)  # type: ignore
@@ -109,10 +164,17 @@ class DIFlask(Flask):
         for name, nested_dep in dependency_map.items():
             kwargs[name] = self._resolve_dependency(nested_dep)
 
-        # Execute dependency factory
-        value = dep_func(**kwargs)  # type: ignore
+        # Execute dependency factory. Generator functions get FastAPI-style
+        # setup/teardown: the code up to `yield` runs now, the yielded
+        # value is what gets injected, and the code after `yield` runs
+        # later as teardown (see _close_dependency_exit_stack).
+        if inspect.isgeneratorfunction(dep_func):
+            cm = contextmanager(dep_func)(**kwargs)
+            value = self._dependency_exit_stack().enter_context(cm)
+        else:
+            value = dep_func(**kwargs)  # type: ignore
 
         # Cache result
-        setattr(g, cache_key, value)
+        cache[dep_func] = value
 
         return value

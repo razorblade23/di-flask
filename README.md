@@ -72,6 +72,33 @@ def override_db():
 app.dependency_overrides[get_db] = override_db
 ```
 
+## Generator dependencies (setup / teardown)
+Just like FastAPI, a dependency can be a generator function that `yield`s
+its value once instead of `return`ing it. Whatever runs before the `yield`
+is setup, the yielded value is what gets injected, and whatever runs after
+the `yield` is teardown — run automatically once the request finishes
+(even if the view raised). This is the common pattern for handing out a
+database session that needs to be closed afterwards:
+
+```python
+from typing import Generator
+from sqlalchemy.orm import Session
+
+def get_session() -> Generator[Session, None, None]:
+    with Session(engine) as session:
+        yield session
+
+SessionDep = Annotated[Session, Depends(get_session)]
+
+@app.route("/users")
+def list_users(session: SessionDep):
+    return [u.name for u in session.query(User).all()]
+```
+
+The default-value style (`def view(session=Depends(get_session))`) works
+the same way. Teardown also runs for dependencies resolved manually via
+`app.resolve(...)`, once the surrounding request or app context ends.
+
 ## Disclaimer
 This is my snippet of code that I use for my Flask project. 
 

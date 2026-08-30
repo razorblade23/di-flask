@@ -69,3 +69,30 @@ def test_two_different_dependencies_are_cached_independently(app, client):
 
     resp = client.get("/ab")
     assert resp.data == b"aba|1|1"
+
+
+def test_dependencies_with_the_same_name_do_not_collide_in_cache(app, client):
+    """The per-request cache is keyed by the dependency callable's
+    identity, not its __name__, so two different callables that
+    happen to share a __name__ (e.g. locally defined closures, or
+    same-named factories from different modules) don't collide."""
+
+    def make_dep(value):
+        def dep():
+            return value
+
+        dep.__name__ = "dep"  # deliberately identical across both
+        return dep
+
+    dep_a = make_dep("A")
+    dep_b = make_dep("B")
+
+    ADep = Annotated[str, Depends(dep_a)]
+    BDep = Annotated[str, Depends(dep_b)]
+
+    @app.route("/collide")
+    def view(a: ADep, b: BDep):
+        return f"{a}-{b}"
+
+    resp = client.get("/collide")
+    assert resp.data == b"A-B"

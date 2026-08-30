@@ -99,6 +99,23 @@ The default-value style (`def view(session=Depends(get_session))`) works
 the same way. Teardown also runs for dependencies resolved manually via
 `app.resolve(...)`, once the surrounding request or app context ends.
 
+## Using `flask-login` or similar libraries along with `di-flask`
+The exact same `werkzeug.local.LocalProxy` instance under the hood (same object identity, same thread/context-local behavior), we are just lying to the type checker about its declared type, which is safe here because we know it'll be a `DIFlask` in any app using this library.
+
+```python
+from flask_di import current_app, Depends
+
+@login_manager.user_loader
+def load_user(user_id):
+    db = current_app.resolve(get_db)
+    return db.get(User, int(user_id))
+```
+
+> [!TIP]
+> If you mix `from flask import current_app` and `from flask_di import current_app` in the same file, they'll get inconsistent typing (one Flask, one DIFlask) even though it's the same proxy at runtime.
+>
+> Make sure you use `from flask_di` everywhere you need `.resolve()`
+
 ## Disclaimer
 This is my snippet of code that I use for my Flask project. 
 

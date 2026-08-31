@@ -65,16 +65,24 @@ class DIFlask(Flask):
     # -------------------------------------------------------------------------
     def _wrap_view(self, view_func):
         sig = inspect.signature(view_func)
-        type_hints = get_type_hints(view_func, include_extras=True)
+        try:
+            type_hints = get_type_hints(view_func, include_extras=True)
+        except NameError:
+            # Some callables (e.g. Flask/Blueprint's built-in send_static_file)
+            # carry annotations that only resolve under TYPE_CHECKING and can't
+            # be evaluated at runtime. Such views never use Depends(...) anyway.
+            return view_func
 
         dependency_map = self._extract_dependencies(sig, type_hints)
 
+        if not dependency_map:
+            return view_func  # nothing to inject — skip the wrapper entirely
+
         def wrapper(*args, **kwargs):
-            injected = {}
-
-            for param_name, depends_obj in dependency_map.items():
-                injected[param_name] = self._resolve_dependency(depends_obj)
-
+            injected = {
+                name: self._resolve_dependency(dep)
+                for name, dep in dependency_map.items()
+            }
             return view_func(*args, **injected, **kwargs)
 
         wrapper.__name__ = view_func.__name__

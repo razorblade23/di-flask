@@ -1,6 +1,6 @@
 import inspect
 from contextlib import ExitStack, contextmanager
-from typing import Annotated, Callable, get_args, get_origin, get_type_hints
+from typing import Annotated, Callable, get_args, get_origin, get_type_hints, overload
 
 from flask import Flask, g
 from werkzeug.exceptions import InternalServerError
@@ -36,9 +36,13 @@ class DIFlask(Flask):
         self.teardown_request(self._close_dependency_exit_stack)
         self.teardown_appcontext(self._close_dependency_exit_stack)
 
-    def resolve[T](self, dependency: Callable[..., T]) -> T:
-        """Public entrypoint for resolving a dependency outside a wrapped view."""
-        return self._resolve_dependency(Depends(dependency))
+    @overload
+    def resolve(self, dependency: Depends[T]) -> T: ...
+    @overload
+    def resolve(self, dependency: Callable[..., T]) -> T: ...
+    def resolve(self, dependency):
+        dep_obj = dependency if isinstance(dependency, Depends) else Depends(dependency)
+        return self._resolve_dependency(dep_obj)
 
     # -------------------------------------------------------------------------
     # Wrap view functions so DI happens automatically

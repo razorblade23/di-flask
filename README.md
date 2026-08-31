@@ -121,6 +121,9 @@ This is my snippet of code that I use for my Flask project.
 
 Just wanted to share as its dead simple, lightweight and pure python.
 
+> [!WARNING]
+> Class based views via `MethodView`/`View.as_view()` do not yet work with this DI library. Worth noting before using it.
+
 ## Contribution
 You are free to contribute to the project in any way you want.
 
